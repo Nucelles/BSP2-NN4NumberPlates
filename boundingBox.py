@@ -1,12 +1,18 @@
 import cv2
-import os 
+import os
+import numpy as np
+from urllib.request import urlopen
+from albumentations import Resize, Compose, BboxParams
+from matplotlib import pyplot as plt
+
+
 
 def showBoundingBox(image, boundingBox):
     copy = image.copy()
     a = 1
     for obj in boundingBox[1:]:
         x, y, w, h = obj
-        #cv2.rectangle(image, (x, y), (x+w, y+h), (0,255,255),2)
+        cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 255), 2)
         cropped = copy[y:y+h, x:x+w]
         cv2.imwrite("LincensePlate_{}.png".format(a), cropped)
         a+=1
@@ -15,7 +21,7 @@ def showBoundingBox(image, boundingBox):
     image = image[y:y+h, x:x+w]
     
     cv2.imshow('result', image)
-    cv2.imwrite("LicensePlate.png",image)
+    #cv2.imwrite("LicensePlate.png",image)
     cv2.waitKey()
     cv2.destroyAllWindows()
 
@@ -48,17 +54,62 @@ def getPlateInfo(txt, summary):
     print(info)
     return info
 
-# Change directory to folder containing labaels
-os.chdir("C:/Users/Stella/Desktop/University/Semester 2/BSP S2/DATA/UFPR-ALPR dataset/DATA/testing/plates")
-# Select the label
-txt = "track0091[01].txt"
+def dataAugmentFormat(img, bbox, defaultID = [1]):
+    return {'image': img, 'bboxes':[bbox], "category_id": defaultID}
 
-getPlateInfo(txt, False)
+def augment(aug):
+    return Compose(aug, bbox_params=BboxParams(format='coco', label_fields=['category_id']))
 
 
-    
-boundingBox = [[855, 504, 64, 21], [859, 510, 7, 12], [867, 510, 7, 12],
-               [874, 511, 7, 11], [885, 511, 7, 11], [893, 511, 7, 11], [902, 511, 3, 12],
-               [910, 511, 3, 11]]
-image = cv2.imread('track0091[01].png',0)
-#showBoundingBox(image, boundingBox)
+def showImage(img):
+    cv2.imshow("Image", img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    return None
+
+
+def visualize_bbox(img, bbox, class_id, class_idx_to_name, color=(255, 0, 0), thickness=2):
+    BOX_COLOR = (255, 0, 0)
+    TEXT_COLOR = (255, 255, 255)
+    x_min, y_min, w, h = bbox
+    x_min, x_max, y_min, y_max = int(x_min), int(x_min + w), int(y_min), int(y_min + h)
+    cv2.rectangle(img, (x_min, y_min), (x_max, y_max), color=color, thickness=thickness)
+    class_name = class_idx_to_name[class_id]
+    ((text_width, text_height), _) = cv2.getTextSize(class_name, cv2.FONT_HERSHEY_SIMPLEX, 0.35, 1)
+    cv2.rectangle(img, (x_min, y_min - int(1.3 * text_height)), (x_min + text_width, y_min), BOX_COLOR, -1)
+    cv2.putText(img, class_name, (x_min, y_min - int(0.3 * text_height)), cv2.FONT_HERSHEY_SIMPLEX, 0.35,TEXT_COLOR, lineType=cv2.LINE_AA)
+    return img
+
+
+def visualize(annotations, category_id_to_name):
+    img = annotations['image'].copy()
+    for idx, bbox in enumerate(annotations['bboxes']):
+        img = visualize_bbox(img, bbox, annotations['category_id'][idx], category_id_to_name)
+    plt.figure(figsize=(12, 12))
+    plt.imshow(img)
+    plt.show()
+
+
+
+
+# Enter correct directory and get file name
+path = "C:/Users/Nucelles 3.0/Documents/BICS/BSP S2/Project/DATA/training/"
+os.chdir(path)
+name = os.listdir(path+"images")[879][:-4]
+
+# Read txt
+bbox = getPlateInfo("plates/"+name+".txt", False)
+
+# Read image
+image = cv2.imread(path+"/images/"+name+'.png')
+
+category_id_to_name = {1:"License Plate"}
+
+dataExample = dataAugmentFormat(image, bbox[1])
+visualize(dataExample, category_id_to_name)
+
+dataExampleResized = augment([Resize(p=1, height=360, width=640)])
+dataExampleResized = dataExampleResized(**dataExample)
+visualize(dataExampleResized, category_id_to_name)
+
+
